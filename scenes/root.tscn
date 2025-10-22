@@ -1,0 +1,72 @@
+[gd_scene load_steps=10 format=3 uid="uid://b8uhj1aqmauhb"]
+
+[ext_resource type="Material" uid="uid://c6k4ty46qo7pf" path="res://materials/ground.tres" id="1_twpsu"]
+[ext_resource type="Script" uid="uid://cv2abp80lkne6" path="res://scripts/Haku.cs" id="2_lrqlo"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sqa0i"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jh1ax"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_j5px3"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_twpsu"]
+sky_material = SubResource("ProceduralSkyMaterial_j5px3")
+
+[sub_resource type="Environment" id="Environment_lrqlo"]
+background_mode = 2
+sky = SubResource("Sky_twpsu")
+tonemap_mode = 2
+glow_enabled = true
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_sqa0i"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jh1ax"]
+
+[node name="Root" type="Node3D"]
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="ground" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(0.99997, 0, 0, 0, -4.37113e-08, -0.999999, 0, 0.999998, -4.37113e-08, 0.0216374, 0.0114183, 1.82682)
+use_collision = true
+size = Vector3(20, 20, 1)
+material = ExtResource("1_twpsu")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0156689, 0.94039, -5.05256)
+size = Vector3(1, 1, 4.00293)
+material = SubResource("StandardMaterial3D_sqa0i")
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="Environment/CSGBox3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0487573, 0.22876, -0.97796)
+size = Vector3(3.4165, 1, 2.09912)
+material = SubResource("StandardMaterial3D_jh1ax")
+
+[node name="World" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="World"]
+environment = SubResource("Environment_lrqlo")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="World"]
+transform = Transform3D(-0.866025, -0.433013, 0.25, 1.49012e-08, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 0, 0)
+shadow_enabled = true
+
+[node name="CameraPivot" type="Node3D" parent="."]
+transform = Transform3D(1, -7.07805e-08, 1.49012e-08, -5.58794e-08, 1, 2.98023e-08, -7.45058e-09, 0, 1, 0.118792, 1.56108, 1.8182)
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+transform = Transform3D(1, 1.22421e-07, 3.3338e-08, 2.22045e-16, 0.947769, 0.31896, 0, -0.318959, 0.947768, 0.0829223, 4.8671, 5.88254)
+current = true
+
+[node name="Haku" type="CharacterBody3D" parent="."]
+script = ExtResource("2_lrqlo")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Haku"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0932144, 2.27999, 2.36683)
+mesh = SubResource("CapsuleMesh_sqa0i")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Haku"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0901349, 2.27776, 2.37178)
+shape = SubResource("CapsuleShape3D_jh1ax")

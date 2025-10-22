@@ -1,0 +1,17 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Godot-specific
+.export/
+.import/
+.idea/
+*.import
+*.tmp
+*.log
+*.vs
+*.mono/
+*.mono_build/
+*.mono_solution/
+*.mono_cache/
+*.godot/
