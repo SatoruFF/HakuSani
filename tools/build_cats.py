@@ -159,9 +159,11 @@ LEGS = {   # key: (lower leg bone that owns the IK, paw bone, is_front)
     "FL": ("fleg2.L", "fpaw.L", True), "FR": ("fleg2.R", "fpaw.R", True),
     "HL": ("rleg2.L", "rpaw.L", False), "HR": ("rleg2.R", "rpaw.R", False),
 }
-WALK = dict(frames=20, L=0.13, duty=0.62, h=0.03, crouch=-0.018,
+WALK = dict(frames=26, L=0.19, duty=0.62, h=0.03, crouch=-0.012,
             phase={"HL": 0.0, "FL": 0.25, "HR": 0.5, "FR": 0.75})
-RUN = dict(frames=14, L=0.36, duty=0.34, h=0.05, crouch=-0.012,
+TROT = dict(frames=18, L=0.34, duty=0.42, h=0.045, crouch=-0.008,
+            phase={"FL": 0.0, "HR": 0.02, "FR": 0.5, "HL": 0.52})
+RUN = dict(frames=16, L=0.5, duty=0.32, h=0.06, crouch=-0.01,
            phase={"HL": 0.0, "HR": 0.1, "FL": 0.45, "FR": 0.55})
 
 
@@ -294,11 +296,23 @@ def gait(arm, name, g, body):
 def walk_body(t):
     w = 2 * math.pi * t
     rots = merge({
-        "hips": [(Yax, 3.5 * math.sin(w)), (Z, 2.5 * math.sin(w))],
-        "chest": [(Yax, -3 * math.sin(w + 1.6)), (Z, -2 * math.sin(w + 1.6))],
-        "neck": [(X, 2 * math.cos(2 * w))],
-        "head": [(Yax, 2.5 * math.sin(w + 1.6)), (X, -2.5 * math.cos(2 * w)), (Z, 1.5 * math.sin(w))],
-    }, tail(w, 9, -4))
+        "hips": [(Yax, 2.5 * math.sin(w)), (Z, 2 * math.sin(w))],
+        "chest": [(Yax, -2 * math.sin(w + 1.6)), (Z, -1.5 * math.sin(w + 1.6))],
+        "neck": [(X, 1 * math.cos(2 * w))],
+        "head": [(Yax, 1.5 * math.sin(w + 1.6)), (X, -1.2 * math.cos(2 * w))],
+    }, tail(w, 7, -4))
+    return rots, -0.003 * (0.5 + 0.5 * math.cos(2 * w))
+
+
+def trot_body(t):
+    w = 2 * math.pi * t
+    rots = merge({
+        "hips": [(Yax, 1.5 * math.sin(w)), (X, -1.5 * math.cos(2 * w))],
+        "chest": [(Yax, -1.5 * math.sin(w)), (X, 1.5 * math.cos(2 * w))],
+        "neck": [(X, -1.2 * math.cos(2 * w))],
+        "head": [(X, 1.5 * math.cos(2 * w))],
+    }, tail(w, 6, 4, 0.6))
+    # small bounce twice per cycle (each diagonal push-off)
     return rots, -0.004 * (0.5 + 0.5 * math.cos(2 * w))
 
 
@@ -338,6 +352,7 @@ def animate(arm):
         pose(arm, fr + 1, rots, -0.006 - 0.002 * math.sin(5 * w))
 
     gait(arm, "Walk", WALK, walk_body)
+    gait(arm, "Trot", TROT, trot_body)
     gait(arm, "Run", RUN, run_body)
 
     # Jump: crouch → launch (legs extend) → tuck
@@ -386,9 +401,8 @@ def animate(arm):
 
     bpy.ops.object.mode_set(mode='OBJECT')
     arm.animation_data.action = bpy.data.actions["Idle"]
-    walk = WALK["L"] / (WALK["frames"] / FPS)
-    run = RUN["L"] / (RUN["frames"] / FPS)
-    print(f"GAIT_SPEEDS walk={walk:.3f} run={run:.3f}")
+    sp = {n: g["L"] / (g["frames"] / FPS) for n, g in (("walk", WALK), ("trot", TROT), ("run", RUN))}
+    print("GAIT_SPEEDS " + " ".join(f"{k}={v:.3f}" for k, v in sp.items()))
 
 if __name__ == "__main__":
     for n, rgb in CATS.items():

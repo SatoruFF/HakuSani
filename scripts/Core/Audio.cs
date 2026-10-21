@@ -19,18 +19,40 @@ public partial class Audio : Node
     readonly List<AudioStreamPlayer> _pool = new();
     const float MusicDb = -8f;
 
+    public static void SetBusVolume(string bus, float lin)
+    {
+        int i = AudioServer.GetBusIndex(bus);
+        if (i < 0) return;
+        AudioServer.SetBusVolumeDb(i, lin < 0.001f ? -80 : Mathf.LinearToDb(lin));
+    }
+
+    static void EnsureBus(string name)
+    {
+        if (AudioServer.GetBusIndex(name) >= 0) return;
+        AudioServer.AddBus();
+        int i = AudioServer.BusCount - 1;
+        AudioServer.SetBusName(i, name);
+        AudioServer.SetBusSend(i, "Master");
+    }
+
     public override void _EnterTree()
     {
         I = this;
+        EnsureBus("Music");
+        EnsureBus("SFX");
         ProcessMode = ProcessModeEnum.Always;
         for (int i = 0; i < 2; i++)
         {
-            _layers[i] = new AudioStreamPlayer { VolumeDb = -80 };
+            _layers[i] = new AudioStreamPlayer { VolumeDb = -80, Bus = "Music" };
             AddChild(_layers[i]);
         }
+        _wind = new AudioStreamPlayer { Stream = new AudioStreamGenerator { MixRate = 22050, BufferLength = 0.25f }, VolumeDb = -80, Bus = "SFX" };
+        AddChild(_wind);
+        _wind.Play();
+        _windPb = (AudioStreamGeneratorPlayback)_wind.GetStreamPlayback();
         for (int i = 0; i < 12; i++)
         {
-            var p = new AudioStreamPlayer();
+            var p = new AudioStreamPlayer { Bus = "SFX" };
             AddChild(p);
             _pool.Add(p);
         }
@@ -66,12 +88,44 @@ public partial class Audio : Node
 
     public void FadeOut() => _masterTarget = 0;
 
+    // ---------------- procedural wind ambience ----------------
+    AudioStreamPlayer _wind;
+    AudioStreamGeneratorPlayback _windPb;
+    float _windLevel, _windTarget;
+    double _wt;
+    float _brownL, _brownR, _lpL, _lpR;
+    readonly RandomNumberGenerator _rng = new();
+
+    /// <summary>0 = silent, 1 = gusty. Levels set this; menus/cinematics turn it off.</summary>
+    public void Ambient(float level) => _windTarget = level;
+
+    void FillWind(float dt)
+    {
+        _windLevel = Mathf.MoveToward(_windLevel, _windTarget, dt * 0.3f);
+        _wind.VolumeDb = _windLevel < 0.01f ? -80 : Mathf.LinearToDb(_windLevel) - 14f;
+        if (_windPb == null) return;
+        int frames = _windPb.GetFramesAvailable();
+        for (int i = 0; i < frames; i++)
+        {
+            _wt += 1 / 22050.0;
+            // slow gusts: two incommensurate sines
+            float gust = 0.55f + 0.3f * Mathf.Sin((float)_wt * 0.37f) + 0.15f * Mathf.Sin((float)_wt * 1.13f + 1.7f);
+            _brownL = Mathf.Clamp(_brownL + (_rng.Randf() * 2 - 1) * 0.02f, -1, 1) * 0.998f;
+            _brownR = Mathf.Clamp(_brownR + (_rng.Randf() * 2 - 1) * 0.02f, -1, 1) * 0.998f;
+            float k = 0.04f + 0.08f * gust;                      // gusts open the filter → brighter whoosh
+            _lpL += (_brownL - _lpL) * k;
+            _lpR += (_brownR - _lpR) * k;
+            _windPb.PushFrame(new Vector2(_lpL, _lpR) * gust * 3f);
+        }
+    }
+
     /// <summary>0 = only past layer, 1 = only future layer, 0.5 = both.</summary>
     public void Focus(float f) => _focusTarget = f;
 
     public override void _Process(double delta)
     {
         float dt = (float)delta;
+        FillWind(dt);
         _focus = Mathf.MoveToward(_focus, _focusTarget, dt * 0.8f);
         _master = Mathf.MoveToward(_master, _masterTarget, dt * 0.5f);
         bool shared = _tracks[0] == _tracks[1];

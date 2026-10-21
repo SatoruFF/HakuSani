@@ -4,7 +4,7 @@ namespace HakuSani;
 
 public static class Shaders
 {
-    static Shader _ghost, _glow, _water, _footprint, _fade, _vortex;
+    static Shader _ghost, _glow, _water, _footprint, _fade, _vortex, _ripple, _beam;
 
     public static Shader Ghost => _ghost ??= new Shader
     {
@@ -65,6 +65,43 @@ void fragment() {
     glow *= smoothstep(0.03, 0.22, r);
     float seam = smoothstep(0.06, 0.0, abs(p.x + 0.12 * sin(p.y * 5.0 + TIME * 1.5))) * smoothstep(0.9, 0.2, r) * split * 3.0;
     ALBEDO = col * glow * intensity * 0.75 + vec3(1.0) * seam * 0.7;
+}",
+    };
+
+    /// <summary>Expanding ring of light: "something changed here across time". t goes 0 → 1.</summary>
+    public static Shader Ripple => _ripple ??= new Shader
+    {
+        Code = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform vec4 color : source_color = vec4(0.7, 0.85, 1.0, 1.0);
+uniform float t = 0.0;
+void fragment() {
+    vec2 p = UV * 2.0 - 1.0;
+    float r = length(p);
+    float front = t;
+    float ring = smoothstep(0.12, 0.0, abs(r - front)) * (1.0 - t);
+    float inner = smoothstep(front, 0.0, r) * 0.25 * (1.0 - t);
+    float a = (ring + inner) * smoothstep(1.0, 0.9, r);
+    ALBEDO = color.rgb * a * 2.5;
+    ALPHA = 1.0;
+}",
+    };
+
+    /// <summary>Soft vertical light column (exit portals).</summary>
+    public static Shader Beam => _beam ??= new Shader
+    {
+        Code = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform vec4 color : source_color = vec4(1.0, 0.95, 0.8, 1.0);
+void fragment() {
+    float edge = pow(1.0 - abs(dot(NORMAL, VIEW)), 1.5);
+    float up = UV.y;
+    float fade = smoothstep(0.0, 0.08, up) * (1.0 - up);
+    float flow = 0.7 + 0.3 * sin(up * 30.0 + TIME * 3.0);
+    ALBEDO = color.rgb * (0.15 + (1.0 - edge) * 0.35) * fade * flow;
+    ALPHA = 1.0;
 }",
     };
 

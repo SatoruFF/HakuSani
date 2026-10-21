@@ -6,9 +6,10 @@ namespace HakuSani;
 /// <summary>Playable cat. Haku = Past era, Sani = Future era.</summary>
 public partial class Cat : CharacterBody3D
 {
-    public const float WalkSpeed = 0.7f, RunSpeed = 2.6f, JumpVelocity = 5.0f, Gravity = 14f;
+    // WalkSpeed = normal movement (a trot); partial stick tilt slows to a walk. Shift = gallop.
+    public const float WalkSpeed = 1.5f, RunSpeed = 3.0f, JumpVelocity = 5.0f, Gravity = 14f;
     // ground speed baked into the gait cycles (tools/build_cats.py prints GAIT_SPEEDS); matching it keeps paws planted
-    public const float WalkAnimSpeed = 0.39f, RunAnimSpeed = 1.543f;
+    public const float WalkAnimSpeed = 0.438f, TrotAnimSpeed = 1.133f, RunAnimSpeed = 1.875f;
 
     public Era Era { get; private set; }
     public string DisplayName => Era == Era.Past ? "Хаку" : "Сани";
@@ -80,7 +81,7 @@ public partial class Cat : CharacterBody3D
     {
         var ap = model.FindChild("AnimationPlayer", true, false) as AnimationPlayer;
         if (ap == null) return null;
-        foreach (var n in new[] { "Idle", "Walk", "Run", "Fall", "Sleep" })
+        foreach (var n in new[] { "Idle", "Walk", "Trot", "Run", "Fall", "Sleep" })
             if (ap.HasAnimation(n)) ap.GetAnimation(n).LoopMode = Animation.LoopModeEnum.Linear;
         return ap;
     }
@@ -165,42 +166,71 @@ public partial class Cat : CharacterBody3D
         bool canControl = ControlEnabled && slot > -2 && _forced == null;
         var v = Velocity;
 
-        if (!IsOnFloor()) v.Y -= Gravity * dt;
+        bool onFloor = IsOnFloor();
+        if (!onFloor) v.Y -= Gravity * dt;
+        // coyote time + jump buffer: forgiving jumps off ledges and slightly early presses
+        _sinceFloor = onFloor ? 0 : _sinceFloor + dt;
+        _jumpBuffer = Mathf.Max(0, _jumpBuffer - dt);
 
         Vector3 dir = Vector3.Zero;
         bool run = false;
+        float mag = 0;
         _pawLock = Mathf.Max(0, _pawLock - dt);
         if (canControl)
         {
             var m = Inputs.Move(slot);
+            mag = Mathf.Clamp(m.Length() * 1.15f, 0, 1);       // analog sticks: partial tilt = slower
             float camYaw = Cam?.Yaw ?? 0;
-            dir = new Vector3(m.X, 0, m.Y).Rotated(Vector3.Up, camYaw);
+            dir = m.LengthSquared() > 0.0001f ? new Vector3(m.X, 0, m.Y).Normalized().Rotated(Vector3.Up, camYaw) : Vector3.Zero;
             run = Inputs.Held(slot, "run");
-            if (Inputs.Pressed(slot, "jump") && IsOnFloor() && _pawLock <= 0)
+            if (Inputs.Pressed(slot, "jump")) _jumpBuffer = 0.14f;
+            if (_jumpBuffer > 0 && _sinceFloor < 0.12f && _pawLock <= 0 && v.Y <= 0.5f)
             {
                 v.Y = JumpVelocity;
-                Play("Jump", 0.08f);
+                _jumpBuffer = 0;
+                _sinceFloor = 1;
+                _animName = "";
+                Play("Jump", 0.06f);
+                Audio.Sfx("paw", -14, 0.15f);
             }
             if (Inputs.Pressed(slot, "use") && Focus != null && _pawLock <= 0)
                 Use(Focus);
         }
         if (_pawLock > 0) dir = Vector3.Zero;
 
-        float speed = run ? RunSpeed : WalkSpeed;
+        float speed = (run ? RunSpeed : WalkSpeed) * mag;
         var horiz = new Vector3(v.X, 0, v.Z);
         var targetVel = dir * speed;
-        float accel = IsOnFloor() ? 12f : 4f;
-        horiz = horiz.MoveToward(targetVel, accel * speed * dt);
+        float accel = onFloor ? (targetVel.LengthSquared() > horiz.LengthSquared() ? 7f : 10f) : 3f;
+        horiz = horiz.MoveToward(targetVel, accel * Mathf.Max(speed, WalkSpeed) * dt);
         v.X = horiz.X;
         v.Z = horiz.Z;
+        float fallSpeed = -v.Y;
         Velocity = v;
         MoveAndSlide();
 
+        // landing: dust + soft thud
+        if (!_wasOnFloor && IsOnFloor() && fallSpeed > 2.5f)
+        {
+            B.Puff(GetParent(), Era, GlobalPosition, Mathf.Clamp(fallSpeed / 6f, 0.3f, 1f));
+            Audio.Sfx(Era == Era.Past ? "step_grass" : "step_stone", -6, 0.1f);
+            Cam?.Shake(0.015f * Mathf.Clamp(fallSpeed / 6f, 0, 1), 0.15f);
+        }
+        _wasOnFloor = IsOnFloor();
+
+        float prevYaw = Rotation.Y;
         if (dir.LengthSquared() > 0.01f)
         {
             float want = Mathf.Atan2(-dir.X, -dir.Z);
-            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, want, 1f - Mathf.Exp(-12f * dt)), 0);
+            float turnRate = run ? 9f : 12f;
+            Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, want, 1f - Mathf.Exp(-turnRate * dt)), 0);
         }
+        // lean into turns, proportional to speed
+        float yawVel = Mathf.Wrap(Rotation.Y - prevYaw, -Mathf.Pi, Mathf.Pi) / Mathf.Max(dt, 0.0001f);
+        float lean = Mathf.Clamp(-yawVel * horiz.Length() * 0.03f, -0.18f, 0.18f);
+        _lean = Mathf.Lerp(_lean, lean, 1f - Mathf.Exp(-8f * dt));
+        _model.Rotation = new Vector3(0, 0, _lean);
+        _ghost.Rotation = _model.Rotation;
 
         UpdateAnim(horiz.Length(), dt);
         TrackSteps();
@@ -219,12 +249,15 @@ public partial class Cat : CharacterBody3D
             return;
         }
         if (hspeed < 0.08f) Play("Idle", 0.3f);
-        else if (hspeed < 1.25f) Play("Walk", 0.22f, Mathf.Max(0.6f, hspeed / WalkAnimSpeed));
-        else Play("Run", 0.18f, Mathf.Max(0.8f, hspeed / RunAnimSpeed));
+        else if (hspeed < 0.75f) Play("Walk", 0.25f, Mathf.Max(0.5f, hspeed / WalkAnimSpeed));
+        else if (hspeed < 2.1f) Play("Trot", 0.22f, Mathf.Max(0.7f, hspeed / TrotAnimSpeed));
+        else Play("Run", 0.2f, Mathf.Max(0.8f, hspeed / RunAnimSpeed));
 
     }
 
     Vector3 _lastPos;
+    float _sinceFloor, _jumpBuffer, _lean;
+    bool _wasOnFloor = true;
     void TrackSteps()
     {
         var p = GlobalPosition;

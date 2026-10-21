@@ -16,6 +16,33 @@ public static class Kit
     static readonly Dictionary<(ulong, Color), Material> TintCache = new();
     static readonly Dictionary<string, PackedScene> SceneCache = new();
 
+    /// <summary>Box collider fitted to the node's meshes, in its own (rotated/scaled) space.</summary>
+    public static StaticBody3D AddBoundsCollider(Node3D n, Era era, float shrink = 0.92f, float minHeight = 0.05f)
+    {
+        var inv = n.GlobalTransform.AffineInverse();
+        Aabb? box = null;
+        void Walk(Node x)
+        {
+            if (x is MeshInstance3D mi && mi.Mesh != null)
+            {
+                var b = (inv * mi.GlobalTransform) * mi.Mesh.GetAabb();
+                box = box.HasValue ? box.Value.Merge(b) : b;
+            }
+            foreach (var c in x.GetChildren()) Walk(c);
+        }
+        Walk(n);
+        if (!box.HasValue || box.Value.Size.Y < minHeight) return null;
+        var bb = box.Value;
+        var body = new StaticBody3D { CollisionLayer = L.Phys(era), CollisionMask = 0 };
+        body.AddChild(new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(bb.Size.X * shrink, bb.Size.Y, bb.Size.Z * shrink) },
+            Position = bb.GetCenter(),
+        });
+        n.AddChild(body);
+        return body;
+    }
+
     public static Node3D Load(Node parent, Era era, string path, Vector3 pos, float rotY = 0, float scale = 1, Color? tint = null, bool shadows = true)
     {
         if (!SceneCache.TryGetValue(path, out var scene))
@@ -29,11 +56,19 @@ public static class Kit
         return n;
     }
 
-    public static Node3D Med(Node parent, Era era, string name, Vector3 pos, float rotY = 0, float scale = 1, Color? tint = null) =>
-        Load(parent, era, "medieval/" + name, pos, rotY, scale, tint ?? (era == Era.Past ? PastTint : FutureTint));
+    public static Node3D Med(Node parent, Era era, string name, Vector3 pos, float rotY = 0, float scale = 1, Color? tint = null, bool collide = false)
+    {
+        var n = Load(parent, era, "medieval/" + name, pos, rotY, scale, tint ?? (era == Era.Past ? PastTint : FutureTint));
+        if (collide) AddBoundsCollider(n, era);
+        return n;
+    }
 
-    public static Node3D City(Node parent, Era era, string name, Vector3 pos, float rotY = 0, float scale = 1, Color? tint = null) =>
-        Load(parent, era, "city/" + name, pos, rotY, scale, tint ?? FutureTint);
+    public static Node3D City(Node parent, Era era, string name, Vector3 pos, float rotY = 0, float scale = 1, Color? tint = null, bool collide = false)
+    {
+        var n = Load(parent, era, "city/" + name, pos, rotY, scale, tint ?? FutureTint);
+        if (collide) AddBoundsCollider(n, era);
+        return n;
+    }
 
     static void Apply(Node n, uint layers, Color? tint, bool shadows)
     {
@@ -94,10 +129,26 @@ public static class Kit
         var tint = ruined ? RuinTint : era == Era.Past ? PastTint : FutureTint;
         var glow = Mats.WindowLit;
 
-        // collision body for the whole house
-        var body = new StaticBody3D { CollisionLayer = L.Phys(era), CollisionMask = 0, Position = new Vector3(0, floors * FH / 2, 0) };
-        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(W - 0.2f, floors * FH, D - 0.2f) } });
+        // collision follows the wall modules (so open doorways of ruins really are open)
+        var body = new StaticBody3D { CollisionLayer = L.Phys(era), CollisionMask = 0 };
         root.AddChild(body);
+        void WallCollider(Vector3 p, float rot, bool openDoor)
+        {
+            float H = floors * FH;
+            var r = Mathf.DegToRad(rot);
+            var outward = new Vector3(Mathf.Sin(r), 0, Mathf.Cos(r));
+            var right = new Vector3(Mathf.Cos(r), 0, -Mathf.Sin(r));
+            var c = p - outward * 0.11f;
+            void Part(Vector3 centre, Vector3 size) => body.AddChild(new CollisionShape3D
+            {
+                Shape = new BoxShape3D { Size = size },
+                Transform = new Transform3D(new Basis(Vector3.Up, r), centre),
+            });
+            if (!openDoor) { Part(c + Vector3.Up * H / 2, new Vector3(2.0f, H, 0.4f)); return; }
+            Part(c + right * 0.79f + Vector3.Up * H / 2, new Vector3(0.42f, H, 0.4f));
+            Part(c - right * 0.79f + Vector3.Up * H / 2, new Vector3(0.42f, H, 0.4f));
+            Part(c + Vector3.Up * (2.3f + (H - 2.3f) / 2), new Vector3(2.0f, H - 2.3f, 0.4f));
+        }
 
         void Side(int count, float half, float rot, System.Func<int, Vector3> at, bool front)
         {
@@ -115,6 +166,7 @@ public static class Kit
                     else piece = window ? "Wall_Plaster_Window_Thin_Round" : "Wall_Plaster_WoodGrid";
                     var p = at(i) + Vector3.Up * f * FH;
                     Med(root, era, piece, p, rot, 1, tint);
+                    if (f == 0) WallCollider(p, rot, door && ruined);
                     var outward = new Vector3(Mathf.Sin(Mathf.DegToRad(rot)), 0, Mathf.Cos(Mathf.DegToRad(rot)));
                     if (door && !ruined)
                         Med(root, era, "Door_1_Round", p - outward * 0.12f + new Vector3(Mathf.Cos(Mathf.DegToRad(rot)), 0, -Mathf.Sin(Mathf.DegToRad(rot))) * -0.55f, rot, 1, tint);

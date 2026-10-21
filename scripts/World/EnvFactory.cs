@@ -58,7 +58,32 @@ public static class EnvFactory
             SsaoRadius = 0.6f,
             SsaoIntensity = 1.4f,
         };
+        ApplyQuality(env, era, night, fog);
         return env;
+    }
+
+    /// <summary>Quality-dependent effects: low = none, medium = SSAO + sun shafts, high = + reflections.</summary>
+    public static void ApplyQuality(Environment env, Era era, bool night, float fog)
+    {
+        int q = Game.I?.Quality ?? 1;
+        env.SsaoEnabled = q >= 1;
+        bool shafts = !night && era == Era.Past && q >= 1;
+        env.VolumetricFogEnabled = shafts;
+        if (shafts)
+        {
+            // soft sun shafts through the overgrown past
+            env.VolumetricFogDensity = Mathf.Clamp(fog * 1.2f, 0.008f, 0.03f);
+            env.VolumetricFogAlbedo = new Color(1f, 0.9f, 0.75f);
+            env.VolumetricFogAnisotropy = 0.65f;
+            env.VolumetricFogLength = 32;
+            env.VolumetricFogSkyAffect = 0.2f;
+        }
+        // wet, reflective future streets
+        env.SsrEnabled = !night && era == Era.Future && q >= 2;
+        env.SsrMaxSteps = 48;
+        env.SsrFadeIn = 0.2f;
+        env.SsrFadeOut = 2f;
+        env.GlowEnabled = q >= 1 || night;
     }
 
     public static DirectionalLight3D Sun(Node parent, Era era, bool night = false)
@@ -73,6 +98,7 @@ public static class EnvFactory
             LightCullMask = L.Vis(era),
             ShadowCasterMask = L.Vis(era),
             ShadowBlur = 1.5f,
+            LightVolumetricFogEnergy = era == Era.Past ? 1.6f : 0.5f,
         };
         l.RotationDegrees = era == Era.Past ? new Vector3(-38, -35, 0) : new Vector3(-30, 140, 0);
         parent.AddChild(l);

@@ -218,6 +218,9 @@ public partial class Chapter2 : LevelBase
         B.Move(_pastPillar, null, alongZ ? new Vector3(0, 0, -86) : new Vector3(86, 0, 0), 1.1f, Tween.TransitionType.Bounce, Tween.EaseType.Out);
         foreach (var c in _pastPillar.GetChildren()) if (c is Node3D n) B.Disable(n);
         await Wait(1.3f);
+        B.Puff(W, Era.Past, _pastPillar.GlobalPosition, 1.6f, 36);
+        Haku.Cam.Shake(0.025f, 0.35f);
+        B.Ripple(W, Era.Future, _blockPos, 1.8f);
         // decades later the debris lies in the wall line instead of across the path
         var dir = alongZ ? new Vector3(Cell * 0.8f, 0, 0) : new Vector3(0, 0, Cell * 0.8f);
         B.Move(_futureRubble, _blockPos + dir + Vector3.Down * 0.3f, null, 0.8f);

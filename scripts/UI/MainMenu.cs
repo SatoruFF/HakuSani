@@ -12,6 +12,7 @@ public partial class MainMenu : Control
         UiKit.Full(this);
         Audio.I.Music("menu");
         Audio.I.Focus(0);
+        Audio.I.Ambient(0);
         var bg = new ColorRect { Color = UiKit.Cream };
         UiKit.Full(bg);
         AddChild(bg);
@@ -34,8 +35,9 @@ public partial class MainMenu : Control
         var right = new VBoxContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
         right.AddThemeConstantOverride("separation", 18);
         row.AddChild(right);
-        var t = UiKit.Label("Time Crossing", 44, UiKit.Ink, true, 0);
+        var t = UiKit.Label(Game.I.IsDemo ? "Time Crossing · демо" : "Time Crossing", 44, UiKit.Ink, true, 0);
         t.LabelSettings.ShadowSize = 0;
+        t.AutowrapMode = TextServer.AutowrapMode.Off;
         right.AddChild(t);
         var sub = UiKit.Label("Двое котов. Два времени. Один путь домой.", 22, UiKit.Ink, false, 0);
         sub.LabelSettings.ShadowSize = 0;
@@ -50,9 +52,10 @@ public partial class MainMenu : Control
         UpdateMode();
         var newGame = UiKit.Button("Новая игра", () => Game.I.NewGame());
         _main.AddChild(newGame);
-        if (Game.I.Unlocked > 1)
+        if (Game.I.Unlocked > 1 && !Game.I.IsDemo)
             _main.AddChild(UiKit.Button($"Продолжить: {Game.ChapterTitles[Game.I.Unlocked].Split('.')[0]}", () => Game.I.StartChapter(Game.I.Unlocked)));
         _main.AddChild(UiKit.Button("Выбор главы", () => { _main.Visible = false; _chapters.Visible = true; (_chapters.GetChild(0) as Control)?.GrabFocus(); }));
+        _main.AddChild(UiKit.Button("Настройки", () => AddChild(new SettingsMenu { Closed = () => newGame.GrabFocus() })));
         _main.AddChild(UiKit.Button("Выход", () => GetTree().Quit()));
 
         _chapters = new VBoxContainer { Visible = false };
@@ -62,7 +65,7 @@ public partial class MainMenu : Control
         {
             int n = i;
             var b = UiKit.Button(Game.ChapterTitles[i], () => { if (n == 0) Game.I.NewGame(); else Game.I.StartChapter(n); });
-            b.Disabled = i > Game.I.Unlocked;
+            b.Disabled = i > Game.I.Unlocked || (Game.I.IsDemo && i > 1);
             b.CustomMinimumSize = new Vector2(520, 50);
             _chapters.AddChild(b);
         }

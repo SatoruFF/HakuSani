@@ -47,6 +47,7 @@ public partial class Chapter1 : LevelBase
         Vines(new Vector3(7f, 0, -21.5f), new Vector3(7f, 0, 4f), 3f, 2);
         Vines(new Vector3(-7.2f, 0, -7.75f), new Vector3(-0.8f, 0, -7.75f), 3f, 3);
 
+        BuildGroundDetail();
         TimeGlow(new Vector3(0, 0, -1.5f), OnGlow);
         Exit(new Vector3(0, 0, -19.5f), 1.3f, OnExit);
     }
@@ -93,6 +94,8 @@ public partial class Chapter1 : LevelBase
         var tw = B.Move(board, board.Position + new Vector3(side * 0.6f, -0.05f, 0.55f), new Vector3(90, side * 40, side * 70), 0.6f, Tween.TransitionType.Back, Tween.EaseType.Out);
         _boards--;
         Audio.Sfx("wood", -2);
+        B.Puff(W, Era.Past, board.GlobalPosition + new Vector3(0, -0.1f, 0.3f), 0.6f, 14);
+        B.Ripple(W, Era.Future, new Vector3(0, 0, -8.4f), 1.3f);
         // future door cracks a bit more with every board
         B.Shake(_futureDoorPivot, 0.02f + (3 - _boards) * 0.015f, 0.5f);
         if (_boards == 0) BoardsGone();
@@ -107,6 +110,9 @@ public partial class Chapter1 : LevelBase
         await Wait(1.1f);
         var tw = B.Move(_futureDoorPivot, null, new Vector3(-88, 0, 0), 0.9f, Tween.TransitionType.Bounce, Tween.EaseType.Out);
         Audio.Sfx("wood_heavy", 0);
+        await Wait(0.35f);
+        B.Puff(W, Era.Future, new Vector3(0, 0, -9.0f), 2.2f, 40);
+        Sani.Cam.Shake(0.03f, 0.45f);
         _doorDown = true;
         _futureDoorPush.Enabled = false;
         Hint(Era.Future, "Дверь упала! Проход открыт");
@@ -115,6 +121,36 @@ public partial class Chapter1 : LevelBase
         foreach (var c in _futureDoorPivot.GetChildren())
             if (c is StaticBody3D sb) { sb.CollisionLayer = L.PhysFuture; }
         Checkpoint(Era.Both, new Vector3(0, 0, -9.5f), 1.2f, new Vector3(0, 0, -9.5f), 0);
+    }
+
+    // ---------------- ground detail ----------------
+    void BuildGroundDetail()
+    {
+        var rng = new RandomNumberGenerator { Seed = 1201 };
+        // PAST: a trodden dirt path from where they wake to the old door, stepping stones half-sunk in grass
+        for (float z = 3.2f; z > -21f; z -= 0.9f)
+        {
+            if (z < -7.6f && z > -8.4f) continue;
+            float x = Mathf.Sin(z * 0.35f) * 0.5f + (z < -15 ? 0.4f : 0);
+            B.DirtDecal(W, Era.Past, new Vector3(x, 0, z), rng.RandfRange(1.0f, 1.5f), rng.RandfRange(0, 360));
+            if (rng.Randf() < 0.45f)
+                B.Prop(W, Era.Past, rng.Randf() < 0.5f ? "RockPath_Round_Small_1" : "RockPath_Round_Small_2", new Vector3(x + rng.RandfRange(-0.3f, 0.3f), 0.0f, z), rng.RandfRange(0, 360), 0.45f, 0, false);
+        }
+        foreach (var (x, z) in new[] { (-3.5f, 1.8f), (3.2f, -4.6f), (-1.8f, -12.2f), (5.4f, -17.5f), (-5.4f, -16.4f), (2.4f, -20.4f) })
+            B.Prop(W, Era.Past, "Pebble_Round_" + rng.RandiRange(1, 5), new Vector3(x, 0, z), rng.RandfRange(0, 360), 0.8f, 0, false);
+
+        // FUTURE: rain puddles that mirror the lit windows and lamps
+        var puddle = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.1f, 0.16f), Roughness = 0.03f, Metallic = 0.3f, MetallicSpecular = 0.8f };
+        foreach (var (x, z, sx, sz) in new[] { (-1.6f, 1.2f, 1.4f, 0.9f), (2.2f, -3.4f, 1.1f, 1.6f), (-3.6f, -5.6f, 0.9f, 0.7f), (1.2f, -11.8f, 1.6f, 1.0f), (-2.8f, -18.2f, 1.2f, 1.4f), (3.4f, -20.4f, 0.9f, 0.8f) })
+        {
+            var mi = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh { TopRadius = 0.5f, BottomRadius = 0.5f, Height = 0.004f, RadialSegments = 24 },
+                MaterialOverride = puddle, Layers = L.VisFuture, Position = new Vector3(x, 0.004f, z), Scale = new Vector3(sx, 1, sz),
+                RotationDegrees = new Vector3(0, x * 37, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            W.AddChild(mi);
+        }
     }
 
     // ---------------- yard A dressing ----------------
@@ -132,13 +168,11 @@ public partial class Chapter1 : LevelBase
         B.Scatter(W, Era.Past, new Rect2(-7, -8, 14, 12), 140, 11);
         B.House(W, Era.Past, new Vector3(-5.2f, 0, -3.2f), new Vector3(3.2f, 2.6f, 3.4f), Mats.PlasterOld, Mats.RoofOld, Mats.WindowDark, 90, 2, 1);
         // abandoned wagon, crates, broken fence
-        Kit.Med(W, Era.Past, "Prop_Wagon", new Vector3(4.3f, 0, -1.2f), 200, 1, Kit.RuinTint).RotationDegrees = new Vector3(0, 200, -6);
-        B.Box(W, Era.Past, new Vector3(4.2f, 0.75f, -2.2f), new Vector3(1.8f, 1.5f, 4f), Mats.WoodOld, 20).GetChild<MeshInstance3D>(1).Visible = false;
-        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-2.6f, 0, -6.6f), 15, 0.75f, Kit.RuinTint);
-        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-2.1f, 0.81f, -6.7f), 40, 0.6f, Kit.RuinTint);
-        B.Box(W, Era.Past, new Vector3(-2.5f, 0.4f, -6.6f), new Vector3(0.9f, 0.8f, 0.9f), Mats.WoodOld, 15).GetChild<MeshInstance3D>(1).Visible = false;
+        Kit.Med(W, Era.Past, "Prop_Wagon", new Vector3(4.3f, 0, -1.2f), 200, 1, Kit.RuinTint, true).RotationDegrees = new Vector3(0, 200, -6);
+        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-2.6f, 0, -6.6f), 15, 0.75f, Kit.RuinTint, true);
+        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-2.1f, 0.81f, -6.7f), 40, 0.6f, Kit.RuinTint, true);
         for (int i = 0; i < 3; i++)
-            Kit.Med(W, Era.Past, "Prop_WoodenFence_Single", new Vector3(-6.6f + i * 0.4f, 0, 0.8f + i * 2f), 90 + i * 12, 1, Kit.RuinTint).RotationDegrees += new Vector3(0, 0, i == 1 ? 25 : 0);
+            Kit.Med(W, Era.Past, "Prop_WoodenFence_Single", new Vector3(-6.6f + i * 0.4f, 0, 0.8f + i * 2f), 90 + i * 12, 1, Kit.RuinTint, true).RotationDegrees += new Vector3(0, 0, i == 1 ? 25 : 0);
         B.Motes(W, Era.Past, new Vector3(0, 1.5f, -2), new Vector3(7, 1.5f, 6), new Color(1f, 0.85f, 0.5f), 160);
 
         // FUTURE: intact, lit, eerily empty
@@ -157,12 +191,11 @@ public partial class Chapter1 : LevelBase
         // tidy planters and bollards
         foreach (var (x, z) in new[] { (-5.8f, 2.4f), (5.8f, -3.2f), (-2.2f, -6.9f), (2.2f, -6.9f) })
         {
-            Kit.City(W, Era.Future, "Prop_Planter_Single", new Vector3(x, 0, z), 0, 0.6f);
+            Kit.City(W, Era.Future, "Prop_Planter_Single", new Vector3(x, 0, z), 0, 0.6f, null, true);
             B.Prop(W, Era.Future, "Bush_Common_Flowers", new Vector3(x, 0.36f, z), x * 40, 0.55f);
-            B.Box(W, Era.Future, new Vector3(x, 0.18f, z), new Vector3(1.2f, 0.36f, 1.2f), Mats.StoneNew).GetChild<MeshInstance3D>(1).Visible = false;
         }
         foreach (var x in new[] { -1.1f, 1.1f })
-            Kit.City(W, Era.Future, "Prop_Bollard", new Vector3(x, 0, -7.0f), 0, 0.8f);
+            Kit.City(W, Era.Future, "Prop_Bollard", new Vector3(x, 0, -7.0f), 0, 0.8f, null, true);
         B.Motes(W, Era.Future, new Vector3(0, 1.5f, -2), new Vector3(7, 1.5f, 6), new Color(0.55f, 0.75f, 1f), 100);
     }
 
@@ -219,15 +252,14 @@ public partial class Chapter1 : LevelBase
         B.House(W, Era.Past, new Vector3(-5.2f, 0, -19.2f), new Vector3(3.2f, 2.2f, 3f), Mats.PlasterOld, Mats.RoofOld, Mats.WindowDark, 90, 2, 1);
         B.House(W, Era.Future, new Vector3(-5.2f, 0, -19.2f), new Vector3(3.2f, 3.8f, 3f), Mats.PlasterNew, Mats.RoofNew, Mats.WindowLit, 90, 2, 2);
         B.Box(W, Era.Future, new Vector3(0, 0.02f, -11.5f), new Vector3(1.2f, 0.04f, 6f), Mats.StoneNew, 0, false);
-        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-3.5f, 0, -12.8f), 30, 0.7f, Kit.RuinTint);
-        Kit.Med(W, Era.Past, "Prop_Brick2", new Vector3(-1.2f, 0, -14.5f), 10, 1, Kit.RuinTint);
-        Kit.Med(W, Era.Past, "Prop_Brick3", new Vector3(3.6f, 0, -14.6f), 70, 1, Kit.RuinTint);
+        Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(-3.5f, 0, -12.8f), 30, 0.7f, Kit.RuinTint, true);
+        Kit.Med(W, Era.Past, "Prop_Brick2", new Vector3(-1.2f, 0, -14.5f), 10, 1, Kit.RuinTint, true);
+        Kit.Med(W, Era.Past, "Prop_Brick3", new Vector3(3.6f, 0, -14.6f), 70, 1, Kit.RuinTint, true);
         Vines(new Vector3(-6.8f, 0, -15.2f), new Vector3(6.8f, 0, -15.2f), 1.5f, 9);
         foreach (var (x, z) in new[] { (-4.5f, -12.5f), (4.5f, -12.5f) })
         {
-            Kit.City(W, Era.Future, "Prop_Planter_Single", new Vector3(x, 0, z), 0, 0.6f);
+            Kit.City(W, Era.Future, "Prop_Planter_Single", new Vector3(x, 0, z), 0, 0.6f, null, true);
             B.Prop(W, Era.Future, "Bush_Common", new Vector3(x, 0.36f, z), 0, 0.5f);
-            B.Box(W, Era.Future, new Vector3(x, 0.18f, z), new Vector3(1.2f, 0.36f, 1.2f), Mats.StoneNew).GetChild<MeshInstance3D>(1).Visible = false;
         }
         B.Lamp(W, Era.Future, new Vector3(0, 2.3f, -18f), new Color(0.7f, 0.85f, 1f), 2f, 8f);
         B.Motes(W, Era.Past, new Vector3(0, 1.5f, -15), new Vector3(7, 1.5f, 7), new Color(1f, 0.85f, 0.5f), 140);
@@ -240,9 +272,11 @@ public partial class Chapter1 : LevelBase
     {
         B.Disable(_chainPost);
         Audio.Sfx("wood", -2);
+        B.Puff(W, Era.Past, _chainPost.GlobalPosition + new Vector3(0.4f, -0.4f, 0), 0.8f);
         B.Move(_chainPost, _chainPost.Position + new Vector3(0.3f, -0.38f, 0), new Vector3(0, 0, -85), 0.6f, Tween.TransitionType.Bounce, Tween.EaseType.Out);
         await Wait(0.9f);
         // decades later: no post, so no chain, so the gate is free
+        B.Ripple(W, Era.Future, new Vector3(1.6f, 0, -16.2f), 1.4f);
         B.Shake(_postFuture, 0.05f, 0.6f);
         await Wait(0.6f);
         var fade = _postFuture.CreateTween().SetParallel();
@@ -251,6 +285,7 @@ public partial class Chapter1 : LevelBase
         B.Disable(_postFuture);
         await Wait(0.8f);
         _gateOpen = true;
+        B.Ripple(W, Era.Future, new Vector3(0, 0, -15f), 1.8f);
         Audio.Sfx("metal", -4);
         Audio.Sfx("door", -4);
         B.Move(_futureGate, null, new Vector3(0, 100, 0), 1.4f, Tween.TransitionType.Elastic, Tween.EaseType.Out);

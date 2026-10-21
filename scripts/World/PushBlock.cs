@@ -41,7 +41,7 @@ public partial class PushBlock : StaticBody3D
             Exclude = new Godot.Collections.Array<Rid> { GetRid() },
         };
         var hits = GetWorld3D().DirectSpaceState.IntersectShape(q, 4);
-        if (hits.Count > 0) { B.Shake(this, 0.02f, 0.25f); Audio.Sfx("wood", -10); return; }
+        if (hits.Count > 0) { B.Shake(this, 0.02f, 0.25f); Audio.Sfx("wood", -10); if (Game.I.DebugScript != null) GD.Print($"PUSH blocked at {target}"); return; }
 
         _moving = true;
         Audio.Sfx("scrape", -4);

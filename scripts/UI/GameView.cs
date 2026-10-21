@@ -11,6 +11,7 @@ public partial class GameView : CanvasLayer
         public Control Root;
         public SubViewport Vp;
         public Label Name, Prompt, Hint;
+        public PanelContainer PromptBox, HintBox;
     }
 
     public readonly Panel[] P = new Panel[2];
@@ -65,6 +66,8 @@ public partial class GameView : CanvasLayer
             HandleInputLocally = false,
             AudioListenerEnable3D = i == 0,
             PositionalShadowAtlasSize = 2048,
+            Scaling3DMode = Viewport.Scaling3DModeEnum.Fsr,
+            Scaling3DScale = Game.I.RenderScale,
         };
         svc.AddChild(p.Vp);
 
@@ -75,13 +78,27 @@ public partial class GameView : CanvasLayer
         p.Name.Position = new Vector2(24, 16);
         p.Root.AddChild(p.Name);
 
-        p.Hint = UiKit.Label("", 22, UiKit.Cream);
-        p.Hint.AnchorLeft = 0.05f; p.Hint.AnchorRight = 0.95f; p.Hint.OffsetTop = 52; p.Hint.OffsetBottom = 110;
-        p.Root.AddChild(p.Hint);
+        // objective: soft pill at the top
+        p.HintBox = Pill(new Color(0.03f, 0.05f, 0.1f, 0.45f), 18);
+        p.HintBox.AnchorLeft = 0.5f; p.HintBox.AnchorRight = 0.5f; p.HintBox.OffsetTop = 54;
+        p.HintBox.GrowHorizontal = Control.GrowDirection.Both;
+        p.Root.AddChild(p.HintBox);
+        p.Hint = UiKit.Label("", 21, UiKit.Cream, false, 0);
+        p.Hint.LabelSettings.ShadowSize = 0;
+        p.Hint.AutowrapMode = TextServer.AutowrapMode.Off;
+        p.HintBox.AddChild(p.Hint);
 
-        p.Prompt = UiKit.Label("", 26, Colors.White);
-        p.Prompt.AnchorLeft = 0; p.Prompt.AnchorRight = 1; p.Prompt.AnchorTop = 0.66f; p.Prompt.AnchorBottom = 0.74f;
-        p.Root.AddChild(p.Prompt);
+        // interaction prompt: brighter pill near the cat, accent border in the cat's colour
+        p.PromptBox = Pill(new Color(0.05f, 0.06f, 0.1f, 0.72f), 22, color);
+        p.PromptBox.AnchorLeft = 0.5f; p.PromptBox.AnchorRight = 0.5f; p.PromptBox.AnchorTop = 0.68f; p.PromptBox.AnchorBottom = 0.68f;
+        p.PromptBox.GrowHorizontal = Control.GrowDirection.Both;
+        p.Root.AddChild(p.PromptBox);
+        p.Prompt = UiKit.Label("", 24, Colors.White, false, 0);
+        p.Prompt.LabelSettings.ShadowSize = 0;
+        p.Prompt.AutowrapMode = TextServer.AutowrapMode.Off;
+        p.PromptBox.AddChild(p.Prompt);
+        p.PromptBox.Visible = false;
+        p.HintBox.Visible = false;
         return p;
     }
 
@@ -102,12 +119,54 @@ public partial class GameView : CanvasLayer
         _divider.Visible = split;
     }
 
-    public void SetPrompt(int i, string text)
+    static PanelContainer Pill(Color bg, int radius, Color? border = null)
     {
-        P[i].Prompt.Text = text ?? "";
+        var sb = new StyleBoxFlat
+        {
+            BgColor = bg, CornerRadiusTopLeft = radius, CornerRadiusTopRight = radius, CornerRadiusBottomLeft = radius, CornerRadiusBottomRight = radius,
+            ContentMarginLeft = 22, ContentMarginRight = 22, ContentMarginTop = 8, ContentMarginBottom = 8,
+        };
+        if (border.HasValue) { sb.BorderColor = border.Value; sb.BorderWidthBottom = sb.BorderWidthTop = sb.BorderWidthLeft = sb.BorderWidthRight = 2; }
+        var pc = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        pc.AddThemeStyleboxOverride("panel", sb);
+        return pc;
     }
 
-    public void SetHint(int i, string text) => P[i].Hint.Text = text ?? "";
+    public void ApplyQuality()
+    {
+        foreach (var p in P)
+        {
+            p.Vp.Scaling3DScale = Game.I.RenderScale;
+            p.Vp.Msaa3D = Game.I.Quality == 0 ? Viewport.Msaa.Disabled : Viewport.Msaa.Msaa2X;
+        }
+    }
+
+    public void SetPrompt(int i, string text)
+    {
+        text ??= "";
+        if (P[i].Prompt.Text == text) return;
+        P[i].Prompt.Text = text;
+        P[i].PromptBox.Visible = text != "";
+        if (text != "")
+        {
+            P[i].PromptBox.Scale = new Vector2(0.9f, 0.9f);
+            P[i].PromptBox.PivotOffset = P[i].PromptBox.Size / 2;
+            CreateTween().TweenProperty(P[i].PromptBox, "scale", Vector2.One, 0.15f).SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        }
+    }
+
+    public void SetHint(int i, string text)
+    {
+        text ??= "";
+        if (P[i].Hint.Text == text) return;
+        P[i].Hint.Text = text;
+        P[i].HintBox.Visible = text != "";
+        if (text != "")
+        {
+            P[i].HintBox.Modulate = new Color(1, 1, 1, 0);
+            CreateTween().TweenProperty(P[i].HintBox, "modulate:a", 1f, 0.4f);
+        }
+    }
 
     public Tween Fade(float to, float time, Color? color = null)
     {

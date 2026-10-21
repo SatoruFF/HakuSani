@@ -18,6 +18,7 @@ public abstract partial class Cinematic : Node3D
 
     public override void _Ready()
     {
+        Audio.I.Ambient(0.15f);
         View = new GameView();
         AddChild(View);
         View.Layout(false, -1);

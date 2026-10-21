@@ -65,6 +65,7 @@ public abstract partial class LevelBase : Node3D
         Haku.Stepped += (c, _) => Audio.Sfx(StepSound(c), -16, 0.12f);
         Sani.Stepped += (c, _) => Audio.Sfx(StepSound(c), -16, 0.12f);
         Audio.I.Music(MusicTracks.past, MusicTracks.future);
+        Audio.I.Ambient(Chapter == 4 ? 0.25f : 0.6f);
 
         View = new GameView();
         AddChild(View);
@@ -72,6 +73,8 @@ public abstract partial class LevelBase : Node3D
         View.P[1].Vp.AddChild(CatCamera.Create(Sani, EnvFuture));
         ApplyLayout();
 
+        View.ApplyQuality();
+        Game.I.SettingsChanged += OnSettings;
         Pause = new PauseMenu { Restart = () => Game.I.StartChapter(Chapter) };
         View.AddChild(Pause);
 
@@ -79,21 +82,93 @@ public abstract partial class LevelBase : Node3D
         Callable.From(Begin).CallDeferred();
     }
 
+    void OnSettings()
+    {
+        if (!IsInsideTree()) return;
+        View.ApplyQuality();
+        EnvFactory.ApplyQuality(EnvPast, Era.Past, Night, FogPast);
+        EnvFactory.ApplyQuality(EnvFuture, Era.Future, Night, FogFuture);
+        foreach (var s in new[] { SunPast, SunFuture })
+            s.DirectionalShadowMode = Game.I.Quality == 0 ? DirectionalLight3D.ShadowMode.Orthogonal : DirectionalLight3D.ShadowMode.Parallel2Splits;
+    }
+
+    public override void _ExitTree() => Game.I.SettingsChanged -= OnSettings;
+
     async void Begin()
     {
         Haku.Cam.SnapBehind();
         Sani.Cam.SnapBehind();
         View.Fade(0, 1.5f);
-        await Intro();
+        if (!(Game.I.DebugScript?.StartsWith("map") ?? false)) await Intro();
+        if (!Game.I.SeenControls && Game.I.DebugScript == null)
+        {
+            var card = new ControlsCard();
+            bool done = false;
+            card.Closed = () => done = true;
+            View.AddChild(card);
+            while (!done) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Game.I.SeenControls = true;
+            Game.I.Save();
+        }
         SetControl(true);
         Input.MouseMode = Input.MouseModeEnum.Captured;
         Running = true;
+        if (Game.I.DebugScript != null && Game.I.DebugScript.StartsWith("map"))
+        {
+            // map[:cx:cz:size] — top-down view of each era with every collider drawn as a translucent box
+            var a = Game.I.DebugScript.Split(':');
+            var c = a.Length >= 4 ? new Vector3(float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), 0, float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture)) : new Vector3(0, 0, -9);
+            float size = a.Length >= 4 ? float.Parse(a[3], System.Globalization.CultureInfo.InvariantCulture) : 34;
+            DebugColliders(this);
+            for (int i = 0; i < 2; i++)
+            {
+                var mapEnv = new Environment { BackgroundMode = Environment.BGMode.Color, BackgroundColor = Colors.Black, AmbientLightSource = Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = 0.6f };
+                var cam = new Camera3D { Projection = Camera3D.ProjectionType.Orthogonal, Size = size, CullMask = View.P[i].Vp.GetCamera3D().CullMask, Environment = mapEnv, Far = 200 };
+                View.P[i].Vp.AddChild(cam);
+                cam.GlobalPosition = c + Vector3.Up * 60;
+                cam.RotationDegrees = new Vector3(-90, 0, 0);
+                cam.Current = true;
+            }
+            SetControl(false);
+        }
         if (Game.I.DebugScript == "solve")
         {
             Input.MouseMode = Input.MouseModeEnum.Visible;
             GD.Print($"SOLVE chapter {Chapter}");
             await DebugSolve();
         }
+    }
+
+    // ---------- collider visualisation (dev only) ----------
+    static void DebugColliders(Node n)
+    {
+        if (n is CollisionShape3D cs && cs.GetParent() is CollisionObject3D co && !cs.Disabled && co.CollisionLayer != 0)
+        {
+            Mesh mesh = cs.Shape switch
+            {
+                BoxShape3D b => new BoxMesh { Size = b.Size },
+                CylinderShape3D cy => new CylinderMesh { TopRadius = cy.Radius, BottomRadius = cy.Radius, Height = cy.Height },
+                CapsuleShape3D cp => new CapsuleMesh { Radius = cp.Radius, Height = cp.Height },
+                _ => null,
+            };
+            float top = cs.GlobalPosition.Y + (cs.Shape is BoxShape3D bx ? bx.Size.Y / 2 : 1f);
+            if (mesh != null && top > 0.05f)
+            {
+                bool past = (co.CollisionLayer & L.PhysPast) != 0, fut = (co.CollisionLayer & L.PhysFuture) != 0;
+                uint layers = (past ? L.VisPast : 0) | (fut ? L.VisFuture : 0);
+                if (layers != 0)
+                    cs.AddChild(new MeshInstance3D
+                    {
+                        Mesh = mesh, Layers = layers, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                        MaterialOverride = new StandardMaterial3D
+                        {
+                            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                            AlbedoColor = new Color(0f, 1f, 1f, 0.55f), NoDepthTest = true,
+                        },
+                    });
+            }
+        }
+        foreach (var c in n.GetChildren()) DebugColliders(c);
     }
 
     // ---------- automated walkthrough (dev only) ----------
@@ -234,6 +309,13 @@ public abstract partial class LevelBase : Node3D
         _exitR = r;
         _onExit = onBoth;
         B.GlowDisc(W, pos, new Color(1f, 0.95f, 0.8f), r);
+        var beam = new MeshInstance3D
+        {
+            Mesh = new CylinderMesh { TopRadius = r * 0.8f, BottomRadius = r * 0.95f, Height = 6, RadialSegments = 32, CapTop = false, CapBottom = false },
+            MaterialOverride = new ShaderMaterial { Shader = Shaders.Beam }, Layers = L.VisShared,
+            Position = pos + Vector3.Up * 3, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        W.AddChild(beam);
         B.Motes(W, Era.Past, pos + Vector3.Up, new Vector3(r, 1, r), new Color(1f, 0.85f, 0.5f), 40);
         B.Motes(W, Era.Future, pos + Vector3.Up, new Vector3(r, 1, r), new Color(0.6f, 0.8f, 1f), 40);
     }

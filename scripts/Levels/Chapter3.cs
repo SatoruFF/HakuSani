@@ -133,6 +133,7 @@ public partial class Chapter3 : LevelBase
         B.Move(_pastGate, new Vector3(0, 2.1f, -19), null, 1.6f, Tween.TransitionType.Sine);
         foreach (var c in _pastGate.GetChildren()) if (c is Node3D n) B.Disable(n);
         await Wait(1.2f);
+        B.Ripple(W, Era.Future, new Vector3(0, 0, -19), 2f);
         // and it stays up for decades: the rusted gate in the future is simply not there
         B.Shake(_futureGate, 0.05f, 0.5f);
         await Wait(0.5f);
@@ -222,6 +223,7 @@ public partial class Chapter3 : LevelBase
         Audio.Sfx("latch", -2);
         B.Move(handle, null, new Vector3(-30, 0, 0), 0.4f);
         Haku.ShowGhost(4); Sani.ShowGhost(4);
+        B.Ripple(W, Era.Past, new Vector3(0, 0, -27.5f), 1.6f);
         await Wait(0.8f);
         B.Move(_pastTowerDoor, null, new Vector3(0, 105, 0), 1.3f);
         foreach (var c in _pastTowerDoor.GetChildren()) if (c is Node3D n) B.Disable(n);
@@ -273,17 +275,16 @@ public partial class Chapter3 : LevelBase
         Skyline(Era.Past, new Rect2(-13, -35, 26, 42), false, 31, 1f);
         Skyline(Era.Future, new Rect2(-13, -35, 26, 42), false, 31, 1f);
         // lively past: wagon, crates, fences; the future keeps only rotten crates
-        Kit.Med(W, Era.Past, "Prop_Wagon", new Vector3(-7, 0, -3.5f), 75);
-        B.Box(W, Era.Past, new Vector3(-8.2f, 0.75f, -3.8f), new Vector3(4f, 1.5f, 1.8f), Mats.WoodOld, -15).GetChild<MeshInstance3D>(1).Visible = false;
+        Kit.Med(W, Era.Past, "Prop_Wagon", new Vector3(-7, 0, -3.5f), 75, 1, null, true);
         foreach (var (x, z, r) in new[] { (6.5f, 4.5f, 10f), (7.2f, 4.0f, 40f), (-6.5f, -28f, 0f), (7f, -21f, 25f) })
         {
-            Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(x, 0, z), r, 0.75f);
-            Kit.Med(W, Era.Future, "Prop_Crate", new Vector3(x, 0, z), r + 8, 0.75f, Kit.RuinTint).RotationDegrees = new Vector3(8, r + 8, 12);
+            Kit.Med(W, Era.Past, "Prop_Crate", new Vector3(x, 0, z), r, 0.75f, null, true);
+            Kit.Med(W, Era.Future, "Prop_Crate", new Vector3(x, 0, z), r + 8, 0.75f, Kit.RuinTint, true).RotationDegrees = new Vector3(8, r + 8, 12);
         }
         for (int i = 0; i < 5; i++)
-            Kit.Med(W, Era.Past, "Prop_MetalFence_Ornament", new Vector3(-11 + i * 2, 0, -6.7f), 0, 0.35f);
+            Kit.Med(W, Era.Past, "Prop_MetalFence_Ornament", new Vector3(-11 + i * 2, 0, -6.7f), 0, 0.35f, null, true);
         for (int i = 0; i < 5; i++)
-            Kit.Med(W, Era.Past, "Prop_MetalFence_Ornament", new Vector3(3 + i * 2, 0, -6.7f), 0, 0.35f);
+            Kit.Med(W, Era.Past, "Prop_MetalFence_Ornament", new Vector3(3 + i * 2, 0, -6.7f), 0, 0.35f, null, true);
         for (float z = 5; z > -34; z -= 3.2f)
             foreach (var x in new[] { -12.7f, 12.7f })
                 Kit.Med(W, Era.Future, "Prop_Vine9", new Vector3(x, 3.2f, z), x < 0 ? 90 : -90, 1f, Kit.RuinTint);

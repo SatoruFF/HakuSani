@@ -51,6 +51,14 @@ public partial class CatCamera : Node3D
         Apply();
     }
 
+    float _shake, _shakeT;
+    Vector2 _jitter;
+    public void Shake(float amount, float time)
+    {
+        _shake = Mathf.Max(_shake, amount);
+        _shakeT = Mathf.Max(_shakeT, time);
+    }
+
     public void AddMouse(Vector2 rel)
     {
         Yaw -= rel.X * Game.I.MouseSensitivity;
@@ -79,14 +87,26 @@ public partial class CatCamera : Node3D
         if (_idleCam > 1.5f && hv.Length() > 0.5f)
             Yaw = Mathf.LerpAngle(Yaw, Target.Rotation.Y, 0.6f * dt);
 
-        var want = Target.GlobalPosition + Vector3.Up * 0.35f;
-        GlobalPosition = GlobalPosition.Lerp(want, 1f - Mathf.Exp(-10f * dt));
+        // look slightly ahead of a moving cat; widen the view when running
+        var hv2 = new Vector3(Target.Velocity.X, 0, Target.Velocity.Z);
+        var want = Target.GlobalPosition + Vector3.Up * 0.35f + hv2 * 0.12f;
+        GlobalPosition = GlobalPosition.Lerp(want, 1f - Mathf.Exp(-8f * dt));
+        float speedK = Mathf.Clamp(hv2.Length() / Cat.RunSpeed, 0, 1);
+        Camera.Fov = Mathf.Lerp(Camera.Fov, 60 + 8 * speedK, 1f - Mathf.Exp(-3f * dt));
+        Distance = Mathf.Lerp(Distance, 2.1f + 0.5f * speedK, 1f - Mathf.Exp(-2f * dt));
+        _jitter = Vector2.Zero;
+        if (_shakeT > 0)
+        {
+            _shakeT -= dt;
+            _jitter = new Vector2((float)GD.RandRange(-1, 1), (float)GD.RandRange(-1, 1)) * _shake * 4f;
+            if (_shakeT <= 0) _shake = 0;
+        }
         Apply();
     }
 
     void Apply()
     {
-        Rotation = new Vector3(Pitch, Yaw, 0);
+        Rotation = new Vector3(Pitch + _jitter.Y, Yaw + _jitter.X, 0);
         _arm.SpringLength = Distance;
     }
 }

@@ -96,6 +96,11 @@ public static class B
         inst.Scale = Vector3.One * scale * BaseScale(name);
         SetLayers(inst, L.Vis(era), shadows);
         parent.AddChild(inst);
+        if (inst.IsInsideTree())
+        {
+            if (name.StartsWith("Rock_")) Kit.AddBoundsCollider(inst, era, 0.75f);        // big rocks are solid
+            else if (name.StartsWith("Bush")) Kit.AddBoundsCollider(inst, era, 0.6f);     // so are bushes
+        }
         if (collideRadius > 0)
         {
             var body = new StaticBody3D { CollisionLayer = L.Phys(era), CollisionMask = 0, Position = pos + Vector3.Up * 1.5f };
@@ -192,6 +197,91 @@ public static class B
         };
         parent.AddChild(p);
         return p;
+    }
+
+    static ImageTexture _dirt;
+
+    /// <summary>Soft-edged dirt patch projected onto the ground (paths, trodden earth).</summary>
+    public static Decal DirtDecal(Node parent, Era era, Vector3 pos, float size, float rotY)
+    {
+        if (_dirt == null)
+        {
+            const int N = 128;
+            var img = Image.CreateEmpty(N, N, false, Image.Format.Rgba8);
+            var noise = new FastNoiseLite { Frequency = 0.06f, Seed = 9, FractalOctaves = 3 };
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    float dx = (x - N / 2f) / (N / 2f), dy = (y - N / 2f) / (N / 2f);
+                    float r = Mathf.Sqrt(dx * dx + dy * dy) + noise.GetNoise2D(x, y) * 0.35f;
+                    float a = Mathf.Clamp((1f - r) * 2.2f, 0, 1) * 0.85f;
+                    float shade = 0.85f + noise.GetNoise2D(x * 3, y * 3) * 0.25f;
+                    img.SetPixel(x, y, new Color(0.42f * shade, 0.33f * shade, 0.22f * shade, a));
+                }
+            img.GenerateMipmaps();
+            _dirt = ImageTexture.CreateFromImage(img);
+        }
+        var d = new Decal
+        {
+            Size = new Vector3(size, 0.3f, size), TextureAlbedo = _dirt, CullMask = L.Vis(era),
+            Position = pos, RotationDegrees = new Vector3(0, rotY, 0), UpperFade = 0.3f, LowerFade = 0.3f,
+        };
+        parent.AddChild(d);
+        return d;
+    }
+
+    /// <summary>One-shot dust puff (landings, falling doors, cleared rubble).</summary>
+    public static void Puff(Node parent, Era era, Vector3 pos, float size = 1f, int amount = 24)
+    {
+        var pm = new ParticleProcessMaterial
+        {
+            EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Ring,
+            EmissionRingAxis = Vector3.Up, EmissionRingRadius = 0.12f * size, EmissionRingInnerRadius = 0.02f, EmissionRingHeight = 0.02f,
+            Direction = new Vector3(0, 0.3f, 0), Spread = 80, InitialVelocityMin = 0.3f * size, InitialVelocityMax = 0.9f * size,
+            Gravity = new Vector3(0, 0.25f, 0), DampingMin = 2, DampingMax = 3,
+            ScaleMin = 0.6f * size, ScaleMax = 1.4f * size,
+        };
+        var curve = new Curve();
+        curve.AddPoint(new Vector2(0, 0.3f)); curve.AddPoint(new Vector2(0.3f, 1)); curve.AddPoint(new Vector2(1, 0));
+        pm.ScaleCurve = new CurveTexture { Curve = curve };
+        var mat = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
+            AlbedoColor = era == Era.Past ? new Color(0.85f, 0.75f, 0.6f, 0.35f) : new Color(0.7f, 0.75f, 0.85f, 0.35f),
+        };
+        var p = new GpuParticles3D
+        {
+            Amount = amount, Lifetime = 1.2f, OneShot = true, Explosiveness = 0.9f, Emitting = true,
+            ProcessMaterial = pm, DrawPass1 = new QuadMesh { Size = new Vector2(0.12f, 0.12f), Material = mat },
+            Layers = L.Vis(era), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            VisibilityAabb = new Aabb(new Vector3(-2, -1, -2), new Vector3(4, 3, 4)),
+        };
+        parent.AddChild(p);
+        p.GlobalPosition = pos + Vector3.Up * 0.03f;
+        p.Finished += p.QueueFree;
+    }
+
+    /// <summary>Time ripple on the ground of one era, plus a brief light flash.</summary>
+    public static void Ripple(Node parent, Era era, Vector3 pos, float radius = 1.2f, Color? color = null)
+    {
+        var c = color ?? (era == Era.Past ? new Color(1f, 0.8f, 0.45f) : new Color(0.55f, 0.75f, 1f));
+        var mat = new ShaderMaterial { Shader = Shaders.Ripple };
+        mat.SetShaderParameter("color", c);
+        var mi = new MeshInstance3D
+        {
+            Mesh = new PlaneMesh { Size = new Vector2(radius * 2, radius * 2) }, MaterialOverride = mat,
+            Layers = L.Vis(era), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        parent.AddChild(mi);
+        mi.GlobalPosition = pos + Vector3.Up * 0.04f;
+        var light = new OmniLight3D { LightColor = c, LightEnergy = 2.5f, OmniRange = radius * 2.5f, LightCullMask = L.Vis(era) };
+        parent.AddChild(light);
+        light.GlobalPosition = pos + Vector3.Up * 0.6f;
+        var t = mi.CreateTween().SetParallel();
+        t.TweenMethod(Callable.From<float>(v => mat.SetShaderParameter("t", v)), 0f, 1f, 1.1f).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Quad);
+        t.TweenProperty(light, "light_energy", 0f, 1.1f);
+        t.Chain().TweenCallback(Callable.From(() => { mi.QueueFree(); light.QueueFree(); }));
     }
 
     /// <summary>Animate a node to a new transform (used for doors falling, beams, etc.).</summary>

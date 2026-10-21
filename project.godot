@@ -40,5 +40,10 @@ common/physics_ticks_per_second=60
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2
-lights_and_shadows/directional_shadow/size=4096
-lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=2
+environment/ssao/quality=1
+environment/ssao/half_size=true
+environment/volumetric_fog/volume_size=48
+environment/volumetric_fog/volume_depth=48
+environment/screen_space_reflection/roughness_quality=1

@@ -23,11 +23,9 @@ public partial class PauseMenu : Control
         _box.AddChild(UiKit.Label("Пауза", 56, UiKit.Cream, true));
         _box.AddChild(UiKit.Button("Продолжить", Close));
         _box.AddChild(UiKit.Button("Начать главу заново", () => { GetTree().Paused = false; Restart?.Invoke(); }));
+        _box.AddChild(UiKit.Button("Настройки", () => AddChild(new SettingsMenu { Closed = () => (_box.GetChild(1) as Control)?.GrabFocus() })));
+        _box.AddChild(UiKit.Button("Управление", () => AddChild(new ControlsCard { Closed = () => (_box.GetChild(1) as Control)?.GrabFocus() })));
         _box.AddChild(UiKit.Button("Главное меню", () => Game.I.ShowMenu()));
-        _box.AddChild(UiKit.Label(
-            "Хаку: WASD, Пробел — прыжок, Shift — бег, E — действие, мышь/Q/R — камера\n" +
-            "Сани: стрелки, Enter — прыжок, / — бег, . — действие, [ ] — камера\n" +
-            "Геймпад: стик, A — прыжок, X — действие, B/RT — бег.  Соло: Tab / Y — сменить кота", 18, UiKit.Cream));
         Visible = false;
     }
 

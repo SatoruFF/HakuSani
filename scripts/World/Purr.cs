@@ -13,7 +13,7 @@ public partial class Purr : AudioStreamPlayer
 
     public static Purr Play(Node parent, float seconds, float volumeDb = -6f)
     {
-        var p = new Purr { _len = seconds, VolumeDb = volumeDb, Stream = new AudioStreamGenerator { MixRate = 22050, BufferLength = 0.3f } };
+        var p = new Purr { _len = seconds, VolumeDb = volumeDb, Bus = "SFX", Stream = new AudioStreamGenerator { MixRate = 22050, BufferLength = 0.3f } };
         parent.AddChild(p);
         p.Play();
         p._pb = (AudioStreamGeneratorPlayback)p.GetStreamPlayback();

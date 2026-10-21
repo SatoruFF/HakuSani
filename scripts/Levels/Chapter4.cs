@@ -79,7 +79,7 @@ public partial class Chapter4 : LevelBase
         B.House(W, Era.Past, new Vector3(10.5f, 0, -13), new Vector3(6, 3, 6), Mats.PlasterNew, Mats.RoofNew, Mats.WindowLit, -90, 3, 2);
         B.House(W, Era.Future, new Vector3(10.5f, 0, -13), new Vector3(6, 3, 6), Mats.PlasterOld, Mats.RoofOld, Mats.WindowDark, -90, 3, 2);
         for (int i = 0; i < 8; i++)
-            Kit.Med(W, Era.Past, "Prop_WoodenFence_Single", new Vector3(13.5f, 0, 3 - i * 2.1f), 90);
+            Kit.Med(W, Era.Past, "Prop_WoodenFence_Single", new Vector3(13.5f, 0, 3 - i * 2.1f), 90, 1, null, true);
         B.Scatter(W, Era.Past, new Rect2(3, -32, 10, 36), 120, 71, new[] { "Flower_3_Group", "Flower_4_Group", "Grass_Common_Short", "Clover_1" });
         B.Scatter(W, Era.Future, new Rect2(3, -32, 10, 36), 120, 72, new[] { "Grass_Wispy_Tall", "Fern_1", "Plant_7" });
     }
@@ -115,8 +115,10 @@ public partial class Chapter4 : LevelBase
         B.Move(p, p.Position + new Vector3(0, -1.45f, 0.3f), new Vector3(0, 20, 0), 0.7f, Tween.TransitionType.Back, Tween.EaseType.In);
         _cleared++;
         Audio.Sfx("stone", -2);
+        B.Puff(W, Era.Past, p.GlobalPosition, 1.2f, 30);
         await Wait(0.9f);
         var f = _futurePiles[i];
+        B.Ripple(W, Era.Future, f.GlobalPosition, 1.0f);
         B.Shake(f, 0.03f, 0.4f);
         await Wait(0.4f);
         B.Move(f, f.Position + Vector3.Down * 1.6f, null, 0.8f);
