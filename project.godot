@@ -10,10 +10,35 @@ config_version=5
 
 [application]
 
-config/name="HakuSani"
+config/name="Haku & Sani: Time Crossing"
+run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.4", "C#", "Forward Plus")
 config/icon="res://assets/images/icon.svg"
+
+[autoload]
+
+Game="*res://scripts/Core/Game.cs"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1600
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [dotnet]
 
 project/assembly_name="HakuSani"
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
